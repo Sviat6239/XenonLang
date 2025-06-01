@@ -3,7 +3,9 @@ from src.parser import Parser
 
 
 code = '''
-print("Hello from Xenon!");
+hello = "Hello,";
+world = "world!";
+print(hello + world);
 '''
 
 lexer = Lexer(code)

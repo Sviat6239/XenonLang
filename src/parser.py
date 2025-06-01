@@ -206,12 +206,9 @@ class Parser:
 
         if isinstance(node, StringNode):
             s = node.string.value
-            if s.startswith('"') and s.endswith('"'):
-                s = s[1:-1]  
-            elif s.startswith("'") and s.endswith("'"):
-                s = s[1:-1] 
+            if (s.startswith('"') and s.endswith('"')) or (s.startswith("'") and s.endswith("'")):
+                s = s[1:-1]
             return s
-
 
         if isinstance(node, BooleanNode):
             return node.boolean.type.name == token_types_list['TRUE'].name
@@ -224,9 +221,10 @@ class Parser:
             operand = self.run(node.operand)
             if op_name == token_types_list['MINUS'].name:
                 return -operand
-            if op_name == token_types_list['LOG'].name:
+            if op_name == token_types_list.get('LOG', None) and op_name is not None:
                 print(operand)
                 return None
+            raise Exception(f"Unknown unary operator: {op_name}")
 
         if isinstance(node, BinOperationNode):
             op_name = node.operator.type.name
@@ -239,6 +237,8 @@ class Parser:
             if op_name == token_types_list['MULTIPLY'].name:
                 return left * right
             if op_name == token_types_list['DIVIDE'].name:
+                if right == 0:
+                    raise Exception("Division by zero")
                 return left // right
             if op_name == token_types_list['MODULO'].name:
                 return left % right
@@ -254,6 +254,22 @@ class Parser:
                 return left > right
             if op_name == token_types_list['GREATER_EQUAL'].name:
                 return left >= right
+            raise Exception(f"Unknown binary operator: {op_name}")
+
+        if isinstance(node, AssignNode):
+            if hasattr(node, 'variable') and isinstance(node.variable, VariableNode):
+                var_name = node.variable.variable.value
+            elif hasattr(node, 'token'):
+                if isinstance(node.token, VariableNode):
+                    var_name = node.token.variable.value
+                else:
+                    var_name = node.token.value
+            else:
+                raise Exception("AssignNode without variable/token")
+
+            value = self.run(node.expression)
+            self.scope[var_name] = value
+            return value
 
         if isinstance(node, VariableNode):
             var_name = node.variable.value
@@ -261,33 +277,34 @@ class Parser:
                 return self.scope[var_name]
             raise Exception(f"Variable '{var_name}' not found")
 
-        if isinstance(node, AssignNode):
-            var_name = node.variable.variable.value
-            value = self.run(node.expression)
-            self.scope[var_name] = value
-            return value
-
-        if isinstance(node, PrintNode):
-            value = self.run(node.expression)
-            print(value)
-            return None
-
         if isinstance(node, FunctionCallNode):
-            func_name = node.func.variable.value
-            if func_name not in self.scope:
+            if isinstance(node.func, VariableNode):
+                func_name = node.func.variable.value
+            else:
+                func_name = node.func.token.value if hasattr(node.func, 'token') else None
+
+            if not func_name or func_name not in self.scope:
                 raise Exception(f"Function '{func_name}' not found")
+
             func = self.scope[func_name]
             args = [self.run(arg) for arg in node.args]
             if callable(func):
                 return func(args)
             raise Exception(f"'{func_name}' is not callable")
 
+        if isinstance(node, PrintNode):
+            value = self.run(node.expression)
+            print(value)
+            return None
+
         if isinstance(node, StatementsNode):
+            result = None
             for stmt in node.code_strings:
                 res = self.run(stmt)
                 if isinstance(stmt, ReturnNode):
                     return res
-            return None
+                result = res
+            return result
 
         if isinstance(node, ReturnNode):
             if node.expression:
@@ -297,14 +314,15 @@ class Parser:
         if isinstance(node, FunctionDefNode):
             def func(args):
                 local_scope = dict(self.scope)
-                for param, arg in zip(node.params, args):
-                    local_scope[param.text] = arg
+                for param_token, arg_val in zip(node.params, args):
+                    local_scope[param_token.text] = arg_val
                 parser = Parser([])
                 parser.scope = local_scope
-                return parser.run(node.body)
+                result = parser.run(node.body)
+                return result
             self.scope[node.name.text] = func
             return None
-
+        
         if isinstance(node, IfNode):
             cond = self.run(node.condition)
             if cond:

@@ -24,47 +24,19 @@ class StringNode(ExpressionNode):
 
 
 class BooleanNode(ExpressionNode):
-    def __init__(self, value: Token):
-        self.value = value
+    def __init__(self, boolean: Token):
+        self.boolean = boolean
 
     def __repr__(self):
-        return f"BooleanNode({self.value})"
+        return f"BooleanNode({self.boolean})"
 
 
 class NullNode(ExpressionNode):
-    def __init__(self, token: Token):
-        self.token = token
+    def __init__(self, null: Token):
+        self.null = null
 
     def __repr__(self):
-        return f"NullNode({self.token})"
-
-
-class VariableNode(ExpressionNode):
-    def __init__(self, variable: Token):
-        self.variable = variable
-
-    def __repr__(self):
-        return f"VariableNode({self.variable})"
-
-
-class AssignNode(ExpressionNode):
-    def __init__(self, operator: Token, left_node: ExpressionNode, right_node: ExpressionNode):
-        self.operator = operator
-        self.left_node = left_node
-        self.right_node = right_node
-
-    def __repr__(self):
-        return f"AssignNode({self.left_node}, {self.operator}, {self.right_node})"
-
-
-class BinOperationNode(ExpressionNode):
-    def __init__(self, operator: Token, left_node: ExpressionNode, right_node: ExpressionNode):
-        self.operator = operator
-        self.left_node = left_node
-        self.right_node = right_node
-
-    def __repr__(self):
-        return f"BinOperationNode({self.left_node}, {self.operator}, {self.right_node})"
+        return f"NullNode({self.null})"
 
 
 class UnaryOperationNode(ExpressionNode):
@@ -76,19 +48,77 @@ class UnaryOperationNode(ExpressionNode):
         return f"UnaryOperationNode({self.operator}, {self.operand})"
 
 
+class BinOperationNode(ExpressionNode):
+    def __init__(self, operator: Token, left_node: ExpressionNode, right_node: ExpressionNode):
+        self.operator = operator
+        self.left_node = left_node
+        self.right_node = right_node
+
+    def __repr__(self):
+        return f"BinOperationNode({self.operator}, {self.left_node}, {self.right_node})"
+
+
+class VariableNode(ExpressionNode):
+    def __init__(self, variable: Token):
+        self.variable = variable
+
+    def __repr__(self):
+        return f"VariableNode({self.variable})"
+
+
+class AssignNode(ExpressionNode):
+    def __init__(self, token: Token, variable: VariableNode, expression: ExpressionNode):
+        self.token = token
+        self.variable = variable
+        self.expression = expression
+
+    def __repr__(self):
+        return f"AssignNode({self.token}, {self.variable}, {self.expression})"
+
+
+class PrintNode(ExpressionNode):
+    def __init__(self, expression: ExpressionNode):
+        self.expression = expression
+
+    def __repr__(self):
+        return f"PrintNode({self.expression})"
+
+
+class FunctionCallNode(ExpressionNode):
+    def __init__(self, func: VariableNode, args: List[ExpressionNode]):
+        self.func = func
+        self.args = args
+
+    def __repr__(self):
+        return f"FunctionCallNode({self.func}, {self.args})"
+
+
+class ReturnNode(ExpressionNode):
+    def __init__(self, expression: Optional[ExpressionNode]):
+        self.expression = expression
+
+    def __repr__(self):
+        return f"ReturnNode({self.expression})"
+
+
+class FunctionDefNode(ExpressionNode):
+    def __init__(self, name: Token, params: List[Token], body: 'StatementsNode'):
+        self.name = name
+        self.params = params
+        self.body = body
+
+    def __repr__(self):
+        return f"FunctionDefNode({self.name}, {self.params}, {self.body})"
+
+
 class IfNode(ExpressionNode):
-    def __init__(
-        self,
-        condition: ExpressionNode,
-        then_branch: 'StatementsNode',
-        else_branch: Optional['StatementsNode'] = None,
-    ):
+    def __init__(self, condition: ExpressionNode, then_branch: 'StatementsNode', else_branch: Optional['StatementsNode']):
         self.condition = condition
         self.then_branch = then_branch
         self.else_branch = else_branch
 
     def __repr__(self):
-        return f"IfNode({self.condition}, then={self.then_branch}, else={self.else_branch})"
+        return f"IfNode({self.condition}, {self.then_branch}, {self.else_branch})"
 
 
 class WhileNode(ExpressionNode):
@@ -101,58 +131,14 @@ class WhileNode(ExpressionNode):
 
 
 class ForNode(ExpressionNode):
-    def __init__(
-        self,
-        init: ExpressionNode,
-        condition: ExpressionNode,
-        step: ExpressionNode,
-        body: 'StatementsNode',
-    ):
+    def __init__(self, init: ExpressionNode, cond: ExpressionNode, step: ExpressionNode, body: 'StatementsNode'):
         self.init = init
-        self.condition = condition
+        self.cond = cond
         self.step = step
         self.body = body
 
     def __repr__(self):
-        return (
-            f"ForNode(init={self.init}, cond={self.condition}, "
-            f"step={self.step}, body={self.body})"
-        )
-
-
-class PrintNode(ExpressionNode):
-    def __init__(self, value: ExpressionNode):
-        self.value = value
-
-    def __repr__(self):
-        return f"PrintNode({self.value})"
-
-
-class ReturnNode(ExpressionNode):
-    def __init__(self, value: Optional[ExpressionNode]):
-        self.value = value
-
-    def __repr__(self):
-        return f"ReturnNode({self.value})"
-
-
-class FunctionDefNode(ExpressionNode):
-    def __init__(self, name: Token, parameters: List[Token], body: 'StatementsNode'):
-        self.name = name
-        self.parameters = parameters
-        self.body = body
-
-    def __repr__(self):
-        return f"FunctionDefNode(name={self.name}, params={self.parameters}, body={self.body})"
-
-
-class FunctionCallNode(ExpressionNode):
-    def __init__(self, function_node, args):
-        self.func = function_node
-        self.args = args
-
-    def __repr__(self):
-        return f"FunctionCallNode({self.callee}, args={self.arguments})"
+        return f"ForNode({self.init}, {self.cond}, {self.step}, {self.body})"
 
 
 class StatementsNode(ExpressionNode):

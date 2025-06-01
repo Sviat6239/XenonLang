@@ -20,7 +20,7 @@ class Token:
 token_types_list = {
     # Литералы
     'NUMBER': TokenType("NUMBER", r'\d+(\.\d+)?'), 
-    'STRING': TokenType("STRING", r'"[^"\n]*"'), 
+    'STRING': TokenType("STRING", r'(\"[^\"\n]*\"|\'[^\'\n]*\')'),
     'VARIABLE': TokenType("VARIABLE", r'[a-zA-Z_][a-zA-Z0-9_]*'), 
 
     # Операторы

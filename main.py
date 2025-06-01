@@ -1,10 +1,9 @@
 from src.lexer import Lexer
 from src.parser import Parser
 
+
 code = '''
-function add(a, b) {
-    return a + b;
-}
+print("Hello from Xenon!");
 '''
 
 lexer = Lexer(code)

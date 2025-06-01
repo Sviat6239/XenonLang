@@ -2,6 +2,7 @@ from abc import ABC
 from typing import List, Optional
 from .token import Token
 
+
 class ExpressionNode(ABC):
     pass
 
@@ -76,7 +77,12 @@ class UnaryOperationNode(ExpressionNode):
 
 
 class IfNode(ExpressionNode):
-    def __init__(self, condition: ExpressionNode, then_branch: 'StatementsNode', else_branch: Optional['StatementsNode'] = None):
+    def __init__(
+        self,
+        condition: ExpressionNode,
+        then_branch: 'StatementsNode',
+        else_branch: Optional['StatementsNode'] = None,
+    ):
         self.condition = condition
         self.then_branch = then_branch
         self.else_branch = else_branch
@@ -95,14 +101,23 @@ class WhileNode(ExpressionNode):
 
 
 class ForNode(ExpressionNode):
-    def __init__(self, init: ExpressionNode, condition: ExpressionNode, step: ExpressionNode, body: 'StatementsNode'):
+    def __init__(
+        self,
+        init: ExpressionNode,
+        condition: ExpressionNode,
+        step: ExpressionNode,
+        body: 'StatementsNode',
+    ):
         self.init = init
         self.condition = condition
         self.step = step
         self.body = body
 
     def __repr__(self):
-        return f"ForNode(init={self.init}, cond={self.condition}, step={self.step}, body={self.body})"
+        return (
+            f"ForNode(init={self.init}, cond={self.condition}, "
+            f"step={self.step}, body={self.body})"
+        )
 
 
 class PrintNode(ExpressionNode):
@@ -132,9 +147,9 @@ class FunctionDefNode(ExpressionNode):
 
 
 class FunctionCallNode(ExpressionNode):
-    def __init__(self, callee: ExpressionNode, arguments: List[ExpressionNode]):
-        self.callee = callee
-        self.arguments = arguments
+    def __init__(self, function_node, args):
+        self.func = function_node
+        self.args = args
 
     def __repr__(self):
         return f"FunctionCallNode({self.callee}, args={self.arguments})"

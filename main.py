@@ -1,16 +1,25 @@
 from src.lexer import Lexer
-from src.parser import Parser
+from src.parser import Parser, Interpreter
 
+def main():
+    code = '''
+    for (var i = 0; i < 72; i = i + 1) {
+        if (i % 2 == 0) {
+            print(i);
+        } else {
+            print(i);
+        }
+    }
+    '''
+    
+    lexer = Lexer(code)
+    tokens = lexer.lex_analysis()
+    
+    parser = Parser(tokens)
+    root_node = parser.parse()
+    
+    interpreter = Interpreter()
+    interpreter.interpret(root_node)
 
-code = '''
-hello = "Hello,";
-world = "world!";
-print(hello + world);
-'''
-
-lexer = Lexer(code)
-lexer.lex_analysis() 
-
-parser = Parser(lexer.token_list)
-root_node = parser.parse_code()
-parser.run(root_node)
+if __name__ == "__main__":
+    main()

@@ -87,6 +87,7 @@ token_types_list = {
     'THROW': TokenType("THROW", r'\bthrow\b'),  # Throw exception
 
     # Keywords (Definitions)
+    'PRINT': TokenType("PRINT", r'\bprint\b'),  # Print function
     'FUNCTION': TokenType("FUNCTION", r'\bfun\b'),  # Function definition
     'CLASS': TokenType("CLASS", r'\bclass\b'),  # Class definition
     'INTERFACE': TokenType("INTERFACE", r'\binterface\b'),  # Interface definition

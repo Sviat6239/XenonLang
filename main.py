@@ -1,13 +1,14 @@
 from src.lexer import Lexer
-from src.parser import Parser, Interpreter
+from src.parser import Parser
+from src.interpreter import Interpreter
 
 def main():
     code = '''
-    for (var i = 0; i < 72; i = i + 1) {
+    for (var i = 0; i < 72 + 1; i = i + 1) {
         if (i % 2 == 0) {
-            print(i);
+            print("Even number: " + i);
         } else {
-            print(i);
+            print("Odd number: " + i);
         }
     }
     '''

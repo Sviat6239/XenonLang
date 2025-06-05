@@ -1,0 +1,13 @@
+// If-Else Statement
+// Determines if a number is positive or negative/zero.
+
+// Declares a mutable variable 'num' of type int, initialized to -3.
+var num: int = -3;
+// Checks if 'num' is greater than 0.
+if (num > 0) {
+    // Prints if true.
+    print("Positive");
+} else {
+    // Prints if false (num <= 0).
+    print("Negative or zero");
+}

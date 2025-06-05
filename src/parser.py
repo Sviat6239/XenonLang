@@ -1,168 +1,639 @@
-from .token import tokenTypesList
-from .token import Token
+from abc import ABC
+from typing import List, Optional, Any, Dict
+from .token import Token, TokenType, token_types_list
 from .ast import *
 
-
 class Parser:
-    def __init__(self, tokens):
+    """Parses a list of tokens into an AST for a strongly-typed language with Python-like imports."""
+    def __init__(self, tokens: List[Token]):
         self.tokens = tokens
         self.pos = 0
-        self.scope = {}
+        self.current_token: Optional[Token] = tokens[0] if tokens else None
 
-    def match(self, *expected):
-        if self.pos < len(self.tokens):
-            current_token = self.tokens[self.pos]
-            if any(t.name == current_token.type.name for t in expected):
-                self.pos += 1
-                return current_token
-        return None
+    def advance(self):
+        """Advances to the next token."""
+        self.pos += 1
+        self.current_token = self.tokens[self.pos] if self.pos < len(self.tokens) else None
 
-    def require(self, *expected):
-        token = self.match(*expected)
-        if not token:
-            raise Exception(f"на позиции {self.pos} ожидается {expected[0].name}")
-        return token
+    def expect(self, token_type_name: str) -> Token:
+        """Expects a token of the given type, advances, and returns it; raises SyntaxError if not found."""
+        if self.current_token and self.current_token.type.name == token_type_name:
+            token = self.current_token
+            self.advance()
+            return token
+        raise SyntaxError(f"Expected {token_type_name}, got {self.current_token.type.name if self.current_token else 'EOF'} at position {self.current_token.position if self.current_token else 'EOF'}")
 
-    def parse_primary(self):
-        if self.match(tokenTypesList['LPAR']):
+    def parse(self) -> ProgramNode:
+        """Parses the entire program into a ProgramNode with imports and statements."""
+        return self.parse_program()
+
+    def parse_program(self) -> ProgramNode:
+        """Parses imports and statements into a ProgramNode.
+
+        Example:
+            import math;
+            from os import path as ospath;
+            var x: int = 5;
+        """
+        imports = []
+        statements = []
+        while self.current_token:
+            if self.current_token.type.name == 'IMPORT':
+                imports.append(self.parse_import())
+            else:
+                statements.append(self.parse_statement())
+        return ProgramNode(imports, statements)
+
+    def parse_import(self) -> ImportNode:
+        """Parses Python-style imports (e.g., 'import math;', 'from os import path as ospath;').
+
+        Example:
+            import math;                 // ImportNode(module=['math'], names=[], alias=None)
+            from os import path as ospath; // ImportNode(module=['os', 'path'], names=['path'], alias='ospath')
+        """
+        self.expect('IMPORT')
+        module = [self.expect('VARIABLE')]
+        while self.current_token and self.current_token.type.name == 'DOT':
+            self.advance()
+            module.append(self.expect('VARIABLE'))
+        names = []
+        alias = None
+        if self.current_token and self.current_token.type.name == 'FROM':
+            self.advance()
+            names = [self.expect('VARIABLE')]
+            while self.current_token and self.current_token.type.name == 'COMMA':
+                self.advance()
+                names.append(self.expect('VARIABLE'))
+            if self.current_token and self.current_token.type.name == 'AS':
+                self.advance()
+                alias = self.expect('VARIABLE')
+        elif self.current_token and self.current_token.type.name == 'AS':
+            self.advance()
+            alias = self.expect('VARIABLE')
+        self.expect('SEMICOLON')
+        return ImportNode(module, names, alias)
+
+    def parse_statement(self) -> ExpressionNode:
+        """Parses a single statement (e.g., declaration, control flow, expression)."""
+        if not self.current_token:
+            raise SyntaxError("Unexpected end of input")
+        
+        if self.current_token.type.name in ('VAR', 'VAL', 'CONST'):
+            return self.parse_declaration()
+        elif self.current_token.type.name == 'IF':
+            return self.parse_if_statement()
+        elif self.current_token.type.name == 'WHILE':
+            return self.parse_while_statement()
+        elif self.current_token.type.name == 'DO':
+            return self.parse_do_while_statement()
+        elif self.current_token.type.name == 'FOR':
+            return self.parse_for_statement()
+        elif self.current_token.type.name == 'SWITCH':
+            return self.parse_switch_statement()
+        elif self.current_token.type.name == 'TRY':
+            return self.parse_try_statement()
+        elif self.current_token.type.name == 'THROW':
+            return self.parse_throw_statement()
+        elif self.current_token.type.name == 'FUNCTION':
+            return self.parse_function_def()
+        elif self.current_token.type.name == 'CLASS':
+            return self.parse_class_def()
+        elif self.current_token.type.name == 'INTERFACE':
+            return self.parse_interface_def()
+        elif self.current_token.type.name == 'ENUM':
+            return self.parse_enum_def()
+        elif self.current_token.type.name == 'RETURN':
+            return self.parse_return_statement()
+        elif self.current_token.type.name == 'BREAK':
+            self.advance()
+            self.expect('SEMICOLON')
+            return BreakNode()
+        elif self.current_token.type.name == 'CONTINUE':
+            self.advance()
+            self.expect('SEMICOLON')
+            return ContinueNode()
+        elif self.current_token.type.name == 'PRINT':
+            return self.parse_print_statement()
+        elif self.current_token.type.name == 'LBRACE':
+            return self.parse_block()
+        else:
             expr = self.parse_expression()
-            self.require(tokenTypesList['RPAR'])
+            self.expect('SEMICOLON')
             return expr
-        if number := self.match(tokenTypesList['NUMBER']):
-            return NumberNode(number)
-        if string := self.match(tokenTypesList['STRING']):
-            return StringNode(string)
-        if boolean := self.match(tokenTypesList['BOOLEAN']):
-            return BooleanNode(boolean)
-        if null := self.match(tokenTypesList['NULL']):
-            return NullNode(null)
-        if ident := self.match(tokenTypesList['VARIABLE']):
-            if self.match(tokenTypesList['LPAR']):
-                args = []
-                if not self.match(tokenTypesList['RPAR']):
-                    args.append(self.parse_expression())
-                    while self.match(tokenTypesList['COMMA']):
-                        args.append(self.parse_expression())
-                    self.require(tokenTypesList['RPAR'])
-                return FunctionCallNode(VariableNode(ident), args)
-            return VariableNode(ident)
-        raise Exception(f"Unexpected token at position {self.pos}")
 
-    def parse_unary(self):
-        if op := self.match(tokenTypesList['MINUS'], tokenTypesList['LOG']):
-            return UnaryOperationNode(op, self.parse_unary())
+    def parse_declaration(self) -> ExpressionNode:
+        """Parses variable declarations (var, val, const) with optional type annotations.
+
+        Example:
+            var x: int = 5;     // VarDeclarationNode(var_token, VariableNode('x'), Token('INT'), NumberNode('5'))
+            val y: string = "hi"; // ValDeclarationNode(val_token, VariableNode('y'), Token('STRING_TYPE'), StringNode('"hi"'))
+            const z: int = 10;   // ConstDeclarationNode(const_token, VariableNode('z'), Token('INT'), NumberNode('10'))
+        """
+        decl_type = self.current_token.type.name
+        decl_token = self.expect(decl_type)
+        variable = VariableNode(self.expect('VARIABLE'))
+        type_token = None
+        if self.current_token and self.current_token.type.name == 'COLON':
+            self.advance()
+            type_token = self.expect_one_of(('INT', 'FLOAT', 'DOUBLE', 'BOOLEAN', 'STRING_TYPE', 'VOID', 'ANY', 'VARIABLE'))
+            if self.current_token and self.current_token.type.name == 'NULLABLE':
+                self.advance()  # Consume '?' for nullable types
+        expr = None
+        if self.current_token.type.name == 'ASSIGN':
+            self.advance()
+            expr = self.parse_expression()
+        self.expect('SEMICOLON')
+        if decl_type == 'VAR':
+            return VarDeclarationNode(decl_token, variable, type_token, expr)
+        elif decl_type == 'VAL':
+            if not expr:
+                raise SyntaxError("Val declaration requires an initializer")
+            return ValDeclarationNode(decl_token, variable, type_token, expr)
+        else:  # CONST
+            if not expr:
+                raise SyntaxError("Const declaration requires an initializer")
+            return ConstDeclarationNode(decl_token, variable, type_token, expr)
+
+    def expect_one_of(self, token_type_names: tuple) -> Token:
+        """Expects one of the specified token types."""
+        if self.current_token and self.current_token.type.name in token_type_names:
+            token = self.current_token
+            self.advance()
+            return token
+        raise SyntaxError(f"Expected one of {token_type_names}, got {self.current_token.type.name if self.current_token else 'EOF'}")
+
+    def parse_if_statement(self) -> IfNode:
+        """Parses an if statement with optional else branch.
+
+        Example:
+            if (x > 0) { return 1; } else { return 0; }
+        """
+        self.expect('IF')
+        self.expect('LPAREN')
+        condition = self.parse_expression()
+        self.expect('RPAREN')
+        then_branch = self.parse_block()
+        else_branch = None
+        if self.current_token and self.current_token.type.name == 'ELSE':
+            self.advance()
+            else_branch = self.parse_block()
+        return IfNode(condition, then_branch, else_branch)
+
+    def parse_while_statement(self) -> WhileNode:
+        """Parses a while loop.
+
+        Example:
+            while (x < 10) { x = x + 1; }
+        """
+        self.expect('WHILE')
+        self.expect('LPAREN')
+        condition = self.parse_expression()
+        self.expect('RPAREN')
+        body = self.parse_block()
+        return WhileNode(condition, body)
+
+    def parse_do_while_statement(self) -> DoWhileNode:
+        """Parses a do-while loop.
+
+        Example:
+            do { x = x + 1; } while (x < 10);
+        """
+        self.expect('DO')
+        body = self.parse_block()
+        self.expect('WHILE')
+        self.expect('LPAREN')
+        condition = self.parse_expression()
+        self.expect('RPAREN')
+        self.expect('SEMICOLON')
+        return DoWhileNode(body, condition)
+
+    def parse_for_statement(self) -> ForNode:
+        """Parses a for loop with optional init, condition, and step.
+
+        Example:
+            for (var i: int = 0; i < 10; i++) { print(i); }
+        """
+        self.expect('FOR')
+        self.expect('LPAREN')
+        init = self.parse_statement() if self.current_token and self.current_token.type.name != 'SEMICOLON' else None
+        if self.current_token and self.current_token.type.name == 'SEMICOLON':
+            self.advance()
+        cond = self.parse_expression() if self.current_token and self.current_token.type.name != 'SEMICOLON' else None
+        self.expect('SEMICOLON')
+        step = self.parse_expression() if self.current_token and self.current_token.type.name != 'RPAREN' else None
+        self.expect('RPAREN')
+        body = self.parse_block()
+        return ForNode(init, cond, step, body)
+
+    def parse_switch_statement(self) -> SwitchNode:
+        """Parses a switch statement with cases and optional default.
+
+        Example:
+            switch (x) { case 1: { print("one"); break; } default: { print("other"); } }
+        """
+        self.expect('SWITCH')
+        self.expect('LPAREN')
+        expression = self.parse_expression()
+        self.expect('RPAREN')
+        self.expect('LBRACE')
+        cases = []
+        default = None
+        while self.current_token and self.current_token.type.name != 'RBRACE':
+            if self.current_token.type.name == 'CASE':
+                self.advance()
+                value = self.parse_expression()
+                self.expect('COLON')
+                body = self.parse_block()
+                cases.append(CaseNode(value, body))
+            elif self.current_token.type.name == 'DEFAULT':
+                self.advance()
+                self.expect('COLON')
+                default = self.parse_block()
+        self.expect('RBRACE')
+        return SwitchNode(expression, cases, default)
+
+    def parse_try_statement(self) -> TryNode:
+        """Parses a try-catch-finally block.
+
+        Example:
+            try { throw "error"; } catch (e: string) { print(e); } finally { print("done"); }
+        """
+        self.expect('TRY')
+        try_block = self.parse_block()
+        catches = []
+        while self.current_token and self.current_token.type.name == 'CATCH':
+            self.advance()
+            self.expect('LPAREN')
+            exception_var = VariableNode(self.expect('VARIABLE'))
+            type_token = None
+            if self.current_token and self.current_token.type.name == 'COLON':
+                self.advance()
+                type_token = self.expect_one_of(('INT', 'FLOAT', 'DOUBLE', 'BOOLEAN', 'STRING_TYPE', 'ANY', 'VARIABLE'))
+            self.expect('RPAREN')
+            body = self.parse_block()
+            catches.append(CatchNode(exception_var, type_token, body))
+        finally_block = None
+        if self.current_token and self.current_token.type.name == 'FINALLY':
+            self.advance()
+            finally_block = self.parse_block()
+        return TryNode(try_block, catches, finally_block)
+
+    def parse_throw_statement(self) -> ThrowNode:
+        """Parses a throw statement.
+
+        Example:
+            throw "error";
+        """
+        self.expect('THROW')
+        expr = self.parse_expression()
+        self.expect('SEMICOLON')
+        return ThrowNode(expr)
+
+    def parse_function_def(self) -> FunctionDefNode:
+        """Parses a function definition with modifiers, parameters, and return type.
+
+        Example:
+            public fun add(x: int, y: int?): int { return x + y; }
+        """
+        modifiers = []
+        while self.current_token and self.current_token.type.name in ('PUBLIC', 'PRIVATE', 'PROTECTED', 'INTERNAL', 'STATIC'):
+            modifiers.append(self.current_token)
+            self.advance()
+        self.expect('FUNCTION')
+        name = self.expect('VARIABLE')
+        self.expect('LPAREN')
+        params = []
+        if self.current_token and self.current_token.type.name != 'RPAREN':
+            params.append(self.parse_param())
+            while self.current_token and self.current_token.type.name == 'COMMA':
+                self.advance()
+                params.append(self.parse_param())
+        self.expect('RPAREN')
+        return_type = None
+        if self.current_token and self.current_token.type.name == 'COLON':
+            self.advance()
+            return_type = self.expect_one_of(('INT', 'FLOAT', 'DOUBLE', 'BOOLEAN', 'STRING_TYPE', 'VOID', 'ANY', 'VARIABLE'))
+            if self.current_token and self.current_token.type.name == 'NULLABLE':
+                self.advance()
+        body = self.parse_block()
+        return FunctionDefNode(name, params, return_type, body, modifiers)
+
+    def parse_param(self) -> ParamNode:
+        """Parses a function parameter with optional type and nullability.
+
+        Example:
+            x: int?     // ParamNode(name='x', type_token=Token('INT'), is_nullable=True)
+        """
+        name = self.expect('VARIABLE')
+        type_token = None
+        is_nullable = False
+        if self.current_token and self.current_token.type.name == 'COLON':
+            self.advance()
+            type_token = self.expect_one_of(('INT', 'FLOAT', 'DOUBLE', 'BOOLEAN', 'STRING_TYPE', 'ANY', 'VARIABLE'))
+            if self.current_token and self.current_token.type.name == 'NULLABLE':
+                self.advance()
+                is_nullable = True
+        return ParamNode(name, type_token, is_nullable)
+
+    def parse_class_def(self) -> ClassNode:
+        """Parses a class definition with optional superclass and interfaces.
+
+        Example:
+            public class MyClass : SuperClass { var x: int = 0; }
+        """
+        modifiers = []
+        while self.current_token and self.current_token.type.name in ('PUBLIC', 'PRIVATE', 'PROTECTED', 'INTERNAL'):
+            modifiers.append(self.current_token)
+            self.advance()
+        self.expect('CLASS')
+        name = self.expect('VARIABLE')
+        superclass = None
+        interfaces = []
+        if self.current_token and self.current_token.type.name == 'COLON':
+            self.advance()
+            superclass = VariableNode(self.expect('VARIABLE'))
+            while self.current_token and self.current_token.type.name == 'COMMA':
+                self.advance()
+                interfaces.append(VariableNode(self.expect('VARIABLE')))
+        self.expect('LBRACE')
+        members = []
+        while self.current_token and self.current_token.type.name != 'RBRACE':
+            members.append(self.parse_statement())
+        self.expect('RBRACE')
+        return ClassNode(name, superclass, interfaces, members, modifiers)
+
+    def parse_interface_def(self) -> InterfaceNode:
+        """Parses an interface definition.
+
+        Example:
+            interface MyInterface { fun method(): void; }
+        """
+        modifiers = []
+        while self.current_token and self.current_token.type.name in ('PUBLIC', 'PRIVATE', 'PROTECTED', 'INTERNAL'):
+            modifiers.append(self.current_token)
+            self.advance()
+        self.expect('INTERFACE')
+        name = self.expect('VARIABLE')
+        self.expect('LBRACE')
+        members = []
+        while self.current_token and self.current_token.type.name != 'RBRACE':
+            members.append(self.parse_statement())
+        self.expect('RBRACE')
+        return InterfaceNode(name, members, modifiers)
+
+    def parse_enum_def(self) -> EnumNode:
+        """Parses an enum definition.
+
+        Example:
+            enum Color { RED, GREEN }
+        """
+        self.expect('ENUM')
+        name = self.expect('VARIABLE')
+        self.expect('LBRACE')
+        values = []
+        members = []
+        while self.current_token and self.current_token.type.name != 'RBRACE':
+            if self.current_token.type.name == 'VARIABLE':
+                values.append(self.current_token)
+                self.advance()
+                if self.current_token and self.current_token.type.name == 'COMMA':
+                    self.advance()
+            else:
+                members.append(self.parse_statement())
+        self.expect('RBRACE')
+        return EnumNode(name, values, members)
+
+    def parse_return_statement(self) -> ReturnNode:
+        """Parses a return statement.
+
+        Example:
+            return x + 1;
+        """
+        self.expect('RETURN')
+        expr = self.parse_expression() if self.current_token and self.current_token.type.name != 'SEMICOLON' else None
+        self.expect('SEMICOLON')
+        return ReturnNode(expr)
+
+    def parse_print_statement(self) -> PrintNode:
+        """Parses a print statement.
+
+        Example:
+            print(x);
+        """
+        self.expect('PRINT')
+        self.expect('LPAREN')
+        expr = self.parse_expression()
+        self.expect('RPAREN')
+        self.expect('SEMICOLON')
+        return PrintNode(expr)
+
+    def parse_block(self) -> BlockNode:
+        """Parses a block of statements within braces.
+
+        Example:
+            { var x: int = 5; print(x); }
+        """
+        self.expect('LBRACE')
+        statements = []
+        while self.current_token and self.current_token.type.name != 'RBRACE':
+            statements.append(self.parse_statement())
+        self.expect('RBRACE')
+        return BlockNode(statements)
+
+    def parse_expression(self) -> ExpressionNode:
+        """Parses an expression, starting with the highest precedence."""
+        return self.parse_null_coalesce()
+
+    def parse_null_coalesce(self) -> ExpressionNode:
+        """Parses null-coalescing expressions (??).
+
+        Example:
+            x ?? 0
+        """
+        expr = self.parse_elvis()
+        while self.current_token and self.current_token.type.name == 'NULL_COALESCE':
+            self.advance()
+            right = self.parse_elvis()
+            expr = NullCoalesceNode(expr, right)
+        return expr
+
+    def parse_elvis(self) -> ExpressionNode:
+        """Parses Elvis operator expressions (?:).
+
+        Example:
+            x ?: 0
+        """
+        expr = self.parse_assignment()
+        while self.current_token and self.current_token.type.name == 'ELVIS':
+            self.advance()
+            right = self.parse_assignment()
+            expr = ElvisNode(expr, right)
+        return expr
+
+    def parse_assignment(self) -> ExpressionNode:
+        """Parses assignment expressions."""
+        expr = self.parse_equality()
+        if self.current_token and self.current_token.type.name == 'ASSIGN':
+            token = self.current_token
+            self.advance()
+            if not isinstance(expr, VariableNode):
+                raise SyntaxError(f"Invalid assignment target at position {token.position}")
+            value = self.parse_expression()
+            return AssignNode(token, expr, value)
+        return expr
+
+    def parse_equality(self) -> ExpressionNode:
+        """Parses equality comparisons (==, !=)."""
+        expr = self.parse_comparison()
+        while self.current_token and self.current_token.type.name in ('EQUAL', 'NOT_EQUAL'):
+            token = self.current_token
+            self.advance()
+            right = self.parse_comparison()
+            expr = BinaryOperationNode(token, expr, right)
+        return expr
+
+    def parse_comparison(self) -> ExpressionNode:
+        """Parses comparison operations (<, >, <=, >=)."""
+        expr = self.parse_term()
+        while self.current_token and self.current_token.type.name in ('LESS', 'GREATER', 'LESS_EQUAL', 'GREATER_EQUAL'):
+            token = self.current_token
+            self.advance()
+            right = self.parse_term()
+            expr = BinaryOperationNode(token, expr, right)
+        return expr
+
+    def parse_term(self) -> ExpressionNode:
+        """Parses addition and subtraction (+, -)."""
+        expr = self.parse_factor()
+        while self.current_token and self.current_token.type.name in ('PLUS', 'MINUS'):
+            token = self.current_token
+            self.advance()
+            right = self.parse_factor()
+            expr = BinaryOperationNode(token, expr, right)
+        return expr
+
+    def parse_factor(self) -> ExpressionNode:
+        """Parses multiplication, division, and modulo (*, /, %)."""
+        expr = self.parse_unary()
+        while self.current_token and self.current_token.type.name in ('MULTIPLY', 'DIVIDE', 'MODULO'):
+            token = self.current_token
+            self.advance()
+            right = self.parse_unary()
+            expr = BinaryOperationNode(token, expr, right)
+        return expr
+
+    def parse_unary(self) -> ExpressionNode:
+        """Parses unary operations (-, !, ~)."""
+        if self.current_token and self.current_token.type.name in ('MINUS', 'NOT', 'BIT_NOT'):
+            token = self.current_token
+            self.advance()
+            operand = self.parse_unary()
+            return UnaryOperationNode(token, operand)
+        return self.parse_instanceof()
+
+    def parse_instanceof(self) -> ExpressionNode:
+        """Parses instanceof expressions.
+
+        Example:
+            x instanceof int
+        """
+        expr = self.parse_new()
+        if self.current_token and self.current_token.type.name == 'INSTANCEOF':
+            self.advance()
+            type_token = self.expect_one_of(('INT', 'FLOAT', 'DOUBLE', 'BOOLEAN', 'STRING_TYPE', 'ANY', 'VARIABLE'))
+            return InstanceOfNode(expr, type_token)
+        return expr
+
+    def parse_new(self) -> ExpressionNode:
+        """Parses object instantiation with 'new'.
+
+        Example:
+            new MyClass(1, 2)
+        """
+        if self.current_token and self.current_token.type.name == 'NEW':
+            self.advance()
+            type_token = self.expect('VARIABLE')
+            self.expect('LPAREN')
+            args = []
+            if self.current_token and self.current_token.type.name != 'RPAREN':
+                args.append(self.parse_expression())
+                while self.current_token and self.current_token.type.name == 'COMMA':
+                    self.advance()
+                    args.append(self.parse_expression())
+            self.expect('RPAREN')
+            return NewNode(type_token, args)
+        return self.parse_lambda()
+
+    def parse_lambda(self) -> ExpressionNode:
+        """Parses lambda expressions.
+
+        Example:
+            lambda (x: int) -> x + 1
+        """
+        if self.current_token and self.current_token.type.name == 'LAMBDA':
+            self.advance()
+            self.expect('LPAREN')
+            params = []
+            if self.current_token and self.current_token.type.name != 'RPAREN':
+                params.append(self.parse_param())
+                while self.current_token and self.current_token.type.name == 'COMMA':
+                    self.advance()
+                    params.append(self.parse_param())
+            self.expect('RPAREN')
+            self.expect('ARROW')
+            body = self.parse_expression()
+            return LambdaNode(params, body)
         return self.parse_primary()
 
-    def parse_term(self):
-        node = self.parse_unary()
-        while op := self.match(tokenTypesList['MUL'], tokenTypesList['DIV']):
-            node = BinOperationNode(op, node, self.parse_unary())
-        return node
+    def parse_primary(self) -> ExpressionNode:
+        """Parses primary expressions (literals, variables, function calls, parenthesized expressions)."""
+        if not self.current_token:
+            raise SyntaxError("Expected expression, got EOF")
+        
+        token = self.current_token
+        self.advance()
 
-    def parse_formula(self):
-        node = self.parse_term()
-        while op := self.match(tokenTypesList['PLUS'], tokenTypesList['MINUS']):
-            node = BinOperationNode(op, node, self.parse_term())
-        return node
-
-    def parse_assignment(self):
-        node = self.parse_formula()
-        if isinstance(node, VariableNode) and (op := self.match(tokenTypesList['ASSIGN'])):
-            return AssignNode(op, node, self.parse_assignment())
-        return node
-
-    def parse_expression(self):
-        return self.parse_assignment()
-
-    def parse_print(self):
-        if op := self.match(tokenTypesList['LOG']):
+        if token.type.name == 'NUMBER':
+            return NumberNode(token)
+        elif token.type.name == 'STRING':
+            return StringNode(token)
+        elif token.type.name == 'CHAR':
+            return CharNode(token)
+        elif token.type.name in ('TRUE', 'FALSE'):
+            return BooleanNode(token)
+        elif token.type.name == 'NULL':
+            return NullNode(token)
+        elif token.type.name == 'VARIABLE':
+            keyword_values = {
+                'print', 'if', 'else', 'while', 'for', 'do', 'switch', 'case', 'default', 'return', 'fun',
+                'class', 'interface', 'enum', 'var', 'val', 'const', 'break', 'continue',
+                'try', 'catch', 'finally', 'throw', 'true', 'false', 'null', 'public',
+                'private', 'protected', 'internal', 'static', 'new', 'this', 'super',
+                'instanceof', 'lambda', 'import', 'from', 'as'
+            }
+            if token.value.lower() in keyword_values:
+                raise SyntaxError(f"Unexpected keyword '{token.value}' used as variable at position {token.position}")
+            if self.current_token and self.current_token.type.name == 'LPAREN':
+                return self.parse_function_call(token)
+            return VariableNode(token)
+        elif token.type.name == 'LPAREN':
             expr = self.parse_expression()
-            return PrintNode(expr)
-        return None
+            self.expect('RPAREN')
+            return expr
+        raise SyntaxError(f"Unexpected token {token.type.name} at position {token.position}")
 
-    def parse_return(self):
-        if self.match(tokenTypesList['RETURN']):
-            if self.match(tokenTypesList['SEMICOLON']):
-                return ReturnNode(None)
-            expr = self.parse_expression()
-            self.require(tokenTypesList['SEMICOLON'])
-            return ReturnNode(expr)
-        return None
+    def parse_function_call(self, func_token: Token) -> FunctionCallNode:
+        """Parses a function call.
 
-    def parse_if(self):
-        if self.match(tokenTypesList['IF']):
-            self.require(tokenTypesList['LPAR'])
-            condition = self.parse_expression()
-            self.require(tokenTypesList['RPAR'])
-            then_branch = self.parse_code_block()
-            else_branch = None
-            if self.match(tokenTypesList['ELSE']):
-                else_branch = self.parse_code_block()
-            return IfNode(condition, then_branch, else_branch)
-        return None
-
-    def parse_while(self):
-        if self.match(tokenTypesList['WHILE']):
-            self.require(tokenTypesList['LPAR'])
-            condition = self.parse_expression()
-            self.require(tokenTypesList['RPAR'])
-            body = self.parse_code_block()
-            return WhileNode(condition, body)
-        return None
-
-    def parse_for(self):
-        if self.match(tokenTypesList['FOR']):
-            self.require(tokenTypesList['LPAR'])
-            init = self.parse_expression()
-            self.require(tokenTypesList['SEMICOLON'])
-            cond = self.parse_expression()
-            self.require(tokenTypesList['SEMICOLON'])
-            step = self.parse_expression()
-            self.require(tokenTypesList['RPAR'])
-            body = self.parse_code_block()
-            return ForNode(init, cond, step, body)
-        return None
-
-    def parse_function(self):
-        if self.match(tokenTypesList['FUNCTION']):
-            name = self.require(tokenTypesList['VARIABLE'])
-            self.require(tokenTypesList['LPAR'])
-            params = []
-            if not self.match(tokenTypesList['RPAR']):
-                params.append(self.require(tokenTypesList['VARIABLE']))
-                while self.match(tokenTypesList['COMMA']):
-                    params.append(self.require(tokenTypesList['VARIABLE']))
-                self.require(tokenTypesList['RPAR'])
-            body = self.parse_code_block()
-            return FunctionDefNode(name, params, body)
-        return None
-
-    def parse_statement(self):
-        return (
-            self.parse_if() or
-            self.parse_while() or
-            self.parse_for() or
-            self.parse_function() or
-            self.parse_return() or
-            self.parse_print() or
-            self.parse_expression()
-        )
-
-    def parse_code_block(self):
-        block = StatementsNode()
-        self.require(tokenTypesList['LBRACE'])
-        while not self.match(tokenTypesList['RBRACE']):
-            stmt = self.parse_statement()
-            if not isinstance(stmt, ReturnNode):
-                self.require(tokenTypesList['SEMICOLON'])
-            block.add_node(stmt)
-        return block
-
-    def parse_code(self):
-        root = StatementsNode()
-        while self.pos < len(self.tokens):
-            stmt = self.parse_statement()
-            if not isinstance(stmt, ReturnNode):
-                self.require(tokenTypesList['SEMICOLON'])
-            root.add_node(stmt)
-        return root
+        Example:
+            foo(1, "hello")
+        """
+        self.expect('LPAREN')
+        args = []
+        if self.current_token and self.current_token.type.name != 'RPAREN':
+            args.append(self.parse_expression())
+            while self.current_token and self.current_token.type.name == 'COMMA':
+                self.advance()
+                args.append(self.parse_expression())
+        self.expect('RPAREN')
+        return FunctionCallNode(VariableNode(func_token), args)

@@ -1,0 +1,10 @@
+// If Statement
+// Checks if a number is positive and prints a message if true.
+
+// Declares a mutable variable 'num' of type int, initialized to 7.
+var num: int = 7;
+// Checks if 'num' is greater than 0.
+if (num > 0) {
+    // Prints a message if the condition is true.
+    print("Number is positive");
+}

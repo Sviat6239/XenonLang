@@ -1,0 +1,11 @@
+// Simple For Loop
+// Prints numbers from 1 to 5 using a for loop.
+
+// Initializes a for loop with:
+// - 'var i = 1': Declares loop variable 'i', starting at 1.
+// - 'i <= 5': Continues loop while 'i' is less than or equal to 5.
+// - 'i = i + 1': Increments 'i' by 1 after each iteration.
+for (var i = 1; i <= 5; i = i + 1) {
+    // Prints the current value of 'i'.
+    print(i);
+}

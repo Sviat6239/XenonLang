@@ -1,0 +1,29 @@
+// Const Array Simulation
+// Uses a constant as a loop boundary to simulate array iteration.
+
+// Declares a constant 'size' to mimic array length.
+const size: int = 5;
+// Loops from 0 to size-1.
+for (var i = 0; i < size; i++) {
+    // Prints the current index.
+    print("Index: " + i);
+}
+
+// Complex If-Else in Loop
+// Classifies numbers from 1 to 10 as small, medium, or large.
+
+// Loops from 1 to 10.
+for (var i = 1; i <= 10; i = i + 1) {
+    // Checks if 'i' is <= 3.
+    if (i <= 3) {
+        // Prints if small.
+        print(i + " is small");
+    } else if (i <= 7) {
+            // Checks if 'i' is <= 7 for medium.
+            print(i + " is a medium");
+        } else {
+            // Prints if large (i.e., > 7).
+            } else {
+                print(i + " is large");
+            }
+}

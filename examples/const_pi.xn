@@ -1,0 +1,7 @@
+// Const Declaration
+// Uses a constant to store and print a fixed value.
+
+// Declares a constant 'pi' of type float, initialized to 3.14159.
+const pi: float = 3.14159;
+// Concatenates "Value of pi: " with 'pi' and prints the result.
+print("Value of pi: " + pi);

@@ -1,0 +1,14 @@
+// For Loop with If-Else
+// Prints whether numbers from 1 to 5 are odd or even.
+
+// For loop iterates from 1 to 5.
+for (var i = 1; i <= 5; i = i + 1) {
+    // Checks if 'i' is even (divisible by 2).
+    if (i % 2 == 0) {
+        // Prints if even.
+        print(i + " is even");
+    } else {
+        // Prints if odd.
+        print(i + " is odd");
+    }
+}

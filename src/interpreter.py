@@ -6,7 +6,9 @@ from .error import format_error
 
 class Interpreter:
     """Interprets an AST for a strongly-typed language with Python-like imports."""
-    def __init__(self):
+    def __init__(self, source: str, filename: str):
+        self.source = source
+        self.filename = filename
         self.variables: Dict[str, Any] = {}  # Global variable scope
         self.functions: Dict[str, FunctionDefNode] = {}  # Function definitions
         self.classes: Dict[str, ClassNode] = {}  # Class definitions
@@ -105,14 +107,26 @@ class Interpreter:
             return node
         elif isinstance(node, ContinueNode):
             return node
-        raise RuntimeError(f"Unknown node type: {type(node)}")
+        raise RuntimeError(format_error(
+            "RuntimeError",
+            f"Unknown node type: {type(node)}",
+            self.filename,
+            self.source,
+            1, 1
+        ))
 
     def get_variable(self, name: str) -> Any:
         """Retrieves a variable's value from the current or parent scopes."""
         for scope in reversed(self.call_stack):
             if name in scope:
                 return scope[name]
-        raise RuntimeError(f"Undefined variable: {name}")
+        raise RuntimeError(format_error(
+            "RuntimeError",
+            f"Undefined variable: {name}",
+            self.filename,
+            self.source,
+            1, 1
+        ))
 
     def interpret_import(self, node: ImportNode) -> None:
         """Interprets a Python-style import (mock implementation).
@@ -249,7 +263,14 @@ class Interpreter:
                 return left * right
             elif op == 'DIVIDE':
                 if right == 0:
-                    raise RuntimeError("Division by zero")
+                    raise RuntimeError(format_error(
+                        "RuntimeError",
+                        "Division by zero",
+                        self.filename,
+                        self.source,
+                        node.operator.line,
+                        node.operator.column
+                    ))
                 return left / right
             elif op == 'MODULO':
                 return left % right
@@ -279,9 +300,23 @@ class Interpreter:
                 return left << right
             elif op == 'SHR':
                 return left >> right
-            raise RuntimeError(f"Unknown operator: {op}")
+            raise RuntimeError(format_error(
+                "RuntimeError",
+                f"Unknown operator: {op}",
+                self.filename,
+                self.source,
+                node.operator.line,
+                node.operator.column
+            ))
         except TypeError as e:
-            raise RuntimeError(f"Type error in operation {op}: {e}")
+            raise RuntimeError(format_error(
+                "RuntimeError",
+                f"Type error in operation {op}: {e}",
+                self.filename,
+                self.source,
+                node.operator.line,
+                node.operator.column
+            ))
 
     def interpret_unary_op(self, node: UnaryOperationNode) -> Any:
         """Interprets a unary operation."""
@@ -294,9 +329,23 @@ class Interpreter:
                 return not operand
             elif op == 'BIT_NOT':
                 return ~operand
-            raise RuntimeError(f"Unknown unary operator: {op}")
+            raise RuntimeError(format_error(
+                "RuntimeError",
+                f"Unknown unary operator: {op}",
+                self.filename,
+                self.source,
+                node.operator.line,
+                node.operator.column
+            ))
         except TypeError as e:
-            raise RuntimeError(f"Type error in unary operation {op}: {e}")
+            raise RuntimeError(format_error(
+                "RuntimeError",
+                f"Type error in unary operation {op}: {e}",
+                self.filename,
+                self.source,
+                node.operator.line,
+                node.operator.column
+            ))
 
     def interpret_null_coalesce(self, node: NullCoalesceNode) -> Any:
         """Interprets a null-coalescing operation (??)."""
@@ -312,7 +361,14 @@ class Interpreter:
         """Interprets an if statement."""
         condition = self.interpret(node.condition)
         if not isinstance(condition, bool):
-            raise RuntimeError(f"Condition must be boolean, got {type(condition)}")
+            raise RuntimeError(format_error(
+                "RuntimeError",
+                f"Condition must be boolean, got {type(condition)}",
+                self.filename,
+                self.source,
+                node.condition.line if hasattr(node.condition, 'line') else 1,
+                node.condition.column if hasattr(node.condition, 'column') else 1
+            ))
         if condition:
             return self.interpret(node.then_branch)
         elif node.else_branch:
@@ -324,7 +380,14 @@ class Interpreter:
         while True:
             condition = self.interpret(node.condition)
             if not isinstance(condition, bool):
-                raise RuntimeError(f"Condition must be boolean, got {type(condition)}")
+                raise RuntimeError(format_error(
+                    "RuntimeError",
+                    f"Condition must be boolean, got {type(condition)}",
+                    self.filename,
+                    self.source,
+                    node.condition.line if hasattr(node.condition, 'line') else 1,
+                    node.condition.column if hasattr(node.condition, 'column') else 1
+                ))
             if not condition:
                 break
             result = self.interpret(node.body)
@@ -348,7 +411,14 @@ class Interpreter:
                 continue
             condition = self.interpret(node.condition)
             if not isinstance(condition, bool):
-                raise RuntimeError(f"Condition must be boolean, got {type(condition)}")
+                raise RuntimeError(format_error(
+                    "RuntimeError",
+                    f"Condition must be boolean, got {type(condition)}",
+                    self.filename,
+                    self.source,
+                    node.condition.line if hasattr(node.condition, 'line') else 1,
+                    node.condition.column if hasattr(node.condition, 'column') else 1
+                ))
             if not condition:
                 break
         return None
@@ -359,7 +429,7 @@ class Interpreter:
             self.interpret(node.init)
         self.push_scope()
         try:
-            while node.cond is None or self.interpret(node.cond):
+            while node.condition is None or self.interpret(node.condition):
                 result = self.interpret(node.body)
                 if isinstance(result, BreakNode):
                     break
@@ -394,7 +464,7 @@ class Interpreter:
             for catch in node.catches:
                 self.push_scope()
                 try:
-                    self.variables[catch.exception_var.variable.value] = str(e)
+                    self.variables[catch.exception_var.value.value] = str(e)
                     return self.interpret(catch.body)
                 finally:
                     self.pop_scope()
@@ -405,30 +475,58 @@ class Interpreter:
 
     def interpret_throw(self, node: ThrowNode) -> None:
         """Interprets a throw statement."""
-        value = self.interpret(node.expression)
-        raise RuntimeError(str(value))
+        value = self.interpret(node.node)
+        raise RuntimeError(format_error(
+            "RuntimeError",
+            str(value),
+            self.filename,
+            self.source,
+            node.node.line if hasattr(node.node, 'line') else None,
+            node.node.column if hasattr(node.node, 'column') else None
+        ))
 
     def interpret_function_def(self, node: FunctionDefNode) -> None:
         """Interprets a function definition."""
-        self.functions[node.name.value] = node
+        self.functions.append(node)
         return None
 
     def interpret_function_call(self, node: FunctionCallNode) -> Any:
         """Interprets a function call."""
-        func_name = node.func.variable.value
+        func_name = node.func.value
         if func_name not in self.functions:
-            raise RuntimeError(f"Undefined function: {func_name}")
+            raise RuntimeError(format_error(
+                "RuntimeError",
+                f"Undefined function: {func_name}",
+                self.filename,
+                self.source,
+                node.func.line,
+                node.func.column
+            ))
         func = self.functions[func_name]
         args = [self.interpret(arg) for arg in node.args]
         if len(args) != len(func.params):
-            raise RuntimeError(f"Expected {len(func.params)} arguments, got {len(args)}")
+            raise TypeError(format_error(
+                "TypeError",
+                f"Expected {len(func.params)} arguments, got {len(args)}",
+                self.filename,
+                self.source,
+                node.func.line,
+                node.func.column
+            ))
         self.push_scope()
         try:
             for param, arg in zip(func.params, args):
                 if param.type_token:
                     self.check_type(arg, param.type_token)
                 if arg is None and not param.is_nullable:
-                    raise RuntimeError(f"Parameter {param.name.value} is not nullable")
+                    raise RuntimeError(format_error(
+                        "RuntimeError",
+                        f"Parameter {param.name.value} is not nullable",
+                        self.filename,
+                        self.source,
+                        param.name.line,
+                        param.name.column
+                    ))
                 self.variables[param.name.value] = arg
             result = self.interpret(func.body)
             if isinstance(result, ReturnNode):
@@ -441,14 +539,28 @@ class Interpreter:
         """Interprets a lambda expression (returns a callable)."""
         def lambda_func(*args):
             if len(args) != len(node.params):
-                raise RuntimeError(f"Expected {len(node.params)} arguments, got {len(args)}")
+                raise TypeError(format_error(
+                    "TypeError",
+                    f"Expected {len(node.params)} arguments, got {len(args)}",
+                    self.filename,
+                    self.source,
+                    node.params[0].line if node.params else 1,
+                    node.params[0].column if node.params else 1
+                ))
             self.push_scope()
             try:
                 for param, arg in zip(node.params, args):
                     if param.type_token:
                         self.check_type(arg, param.type_token)
                     if arg is None and not param.is_nullable:
-                        raise RuntimeError(f"Parameter {param.name.value} is not nullable")
+                        raise RuntimeError(format_error(
+                            "RuntimeError",
+                            f"Parameter {param.name.value} is not nullable",
+                            self.filename,
+                            self.source,
+                            param.name.line,
+                            param.name.column
+                        ))
                     self.variables[param.name.value] = arg
                 return self.interpret(node.body)
             finally:
@@ -504,7 +616,14 @@ class Interpreter:
         """Interprets object instantiation."""
         class_name = node.type_token.value
         if class_name not in self.classes:
-            raise RuntimeError(f"Undefined class: {class_name}")
+            raise RuntimeError(format_error(
+                "RuntimeError",
+                f"Undefined class: {class_name}",
+                self.filename,
+                self.source,
+                node.type_token.line,
+                node.type_token.column
+            ))
         args = [self.interpret(arg) for arg in node.args]
         instance = {'__class__': class_name}
         return instance
@@ -520,5 +639,3 @@ class Interpreter:
             return None
         finally:
             self.pop_scope()
-
-           

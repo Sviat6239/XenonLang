@@ -189,7 +189,7 @@ class Parser:
             expr = self.parse_expression()
         self.expect('SEMICOLON')
         if decl_type == 'VAR':
-            return VarDeclarationNode(expr)
+            return VarDeclarationNode(decl_token, variable, type_token, expr)
         elif decl_type == 'VAL':
             if not expr:
                 raise SyntaxError(format_error(
@@ -200,7 +200,7 @@ class Parser:
                     decl_token.line,
                     decl_token.column
                 ))
-            return ValDeclarationNode(decl_token)
+            return ValDeclarationNode(decl_token, variable, type_token, expr)
         else:  # CONST
             if not expr:
                 raise SyntaxError(format_error(
@@ -211,7 +211,7 @@ class Parser:
                     decl_token.line,
                     decl_token.column
                 ))
-            return ConstDeclarationNode(expr.value)
+            return ConstDeclarationNode(decl_token, variable, type_token, expr)
 
     def parse_if_statement(self) -> IfNode:
         """Parses an if statement with optional else branch.

@@ -50,7 +50,7 @@ class Interpreter:
         elif isinstance(node, NullNode):
             return None
         elif isinstance(node, VariableNode):
-            return self.get_variable(node.variable.value)
+            return self.get_variable(node.variable.value, node.variable.line, node.variable.column)
         elif isinstance(node, AssignNode):
             return self.interpret_assign(node)
         elif isinstance(node, VarDeclarationNode):
@@ -112,10 +112,11 @@ class Interpreter:
             f"Unknown node type: {type(node)}",
             self.filename,
             self.source,
-            1, 1
+            getattr(node, 'line', 1),
+            getattr(node, 'column', 1)
         ))
 
-    def get_variable(self, name: str) -> Any:
+    def get_variable(self, name: str, line: int, column: int) -> Any:
         """Retrieves a variable's value from the current or parent scopes."""
         for scope in reversed(self.call_stack):
             if name in scope:
@@ -125,7 +126,8 @@ class Interpreter:
             f"Undefined variable: {name}",
             self.filename,
             self.source,
-            1, 1
+            line,
+            column
         ))
 
     def interpret_import(self, node: ImportNode) -> None:
@@ -237,6 +239,19 @@ class Interpreter:
                 type_token.line,
                 type_token.column
             ))
+        elif expected_type == 'void':
+            if value is None:
+                return
+            raise TypeError(format_error(
+                "TypeError",
+                f"Expected void, got {type(value).__name__}",
+                self.filename,
+                self.source,
+                type_token.line,
+                type_token.column
+            ))
+        elif expected_type == 'any':
+            return
         else:
             raise RuntimeError(format_error(
                 "RuntimeError",
@@ -287,19 +302,64 @@ class Interpreter:
             elif op == 'GREATER_EQUAL':
                 return left >= right
             elif op == 'AND':
-                return left and right
+                return bool(left and right)
             elif op == 'OR':
-                return left or right
+                return bool(left or right)
             elif op == 'BIT_AND':
-                return left & right
+                if isinstance(left, int) and isinstance(right, int):
+                    return left & right
+                raise TypeError(format_error(
+                    "TypeError",
+                    "Bitwise AND requires integers",
+                    self.filename,
+                    self.source,
+                    node.operator.line,
+                    node.operator.column
+                ))
             elif op == 'BIT_OR':
-                return left | right
+                if isinstance(left, int) and isinstance(right, int):
+                    return left | right
+                raise TypeError(format_error(
+                    "TypeError",
+                    "Bitwise OR requires integers",
+                    self.filename,
+                    self.source,
+                    node.operator.line,
+                    node.operator.column
+                ))
             elif op == 'BIT_XOR':
-                return left ^ right
+                if isinstance(left, int) and isinstance(right, int):
+                    return left ^ right
+                raise TypeError(format_error(
+                    "TypeError",
+                    "Bitwise XOR requires integers",
+                    self.filename,
+                    self.source,
+                    node.operator.line,
+                    node.operator.column
+                ))
             elif op == 'SHL':
-                return left << right
+                if isinstance(left, int) and isinstance(right, int):
+                    return left << right
+                raise TypeError(format_error(
+                    "TypeError",
+                    "Left shift requires integers",
+                    self.filename,
+                    self.source,
+                    node.operator.line,
+                    node.operator.column
+                ))
             elif op == 'SHR':
-                return left >> right
+                if isinstance(left, int) and isinstance(right, int):
+                    return left >> right
+                raise TypeError(format_error(
+                    "TypeError",
+                    "Right shift requires integers",
+                    self.filename,
+                    self.source,
+                    node.operator.line,
+                    node.operator.column
+                ))
             raise RuntimeError(format_error(
                 "RuntimeError",
                 f"Unknown operator: {op}",
@@ -311,7 +371,7 @@ class Interpreter:
         except TypeError as e:
             raise RuntimeError(format_error(
                 "RuntimeError",
-                f"Type error in operation {op}: {e}",
+                f"Type error in operation {op}: {str(e)}",
                 self.filename,
                 self.source,
                 node.operator.line,
@@ -328,7 +388,16 @@ class Interpreter:
             elif op == 'NOT':
                 return not operand
             elif op == 'BIT_NOT':
-                return ~operand
+                if isinstance(operand, int):
+                    return ~operand
+                raise TypeError(format_error(
+                    "TypeError",
+                    "Bitwise NOT requires an integer",
+                    self.filename,
+                    self.source,
+                    node.operator.line,
+                    node.operator.column
+                ))
             raise RuntimeError(format_error(
                 "RuntimeError",
                 f"Unknown unary operator: {op}",
@@ -340,7 +409,7 @@ class Interpreter:
         except TypeError as e:
             raise RuntimeError(format_error(
                 "RuntimeError",
-                f"Type error in unary operation {op}: {e}",
+                f"Type error in unary operation {op}: {str(e)}",
                 self.filename,
                 self.source,
                 node.operator.line,
@@ -363,11 +432,11 @@ class Interpreter:
         if not isinstance(condition, bool):
             raise RuntimeError(format_error(
                 "RuntimeError",
-                f"Condition must be boolean, got {type(condition)}",
+                f"Condition must be boolean, got {type(condition).__name__}",
                 self.filename,
                 self.source,
-                node.condition.line if hasattr(node.condition, 'line') else 1,
-                node.condition.column if hasattr(node.condition, 'column') else 1
+                getattr(node.condition, 'line', 1),
+                getattr(node.condition, 'column', 1)
             ))
         if condition:
             return self.interpret(node.then_branch)
@@ -382,11 +451,11 @@ class Interpreter:
             if not isinstance(condition, bool):
                 raise RuntimeError(format_error(
                     "RuntimeError",
-                    f"Condition must be boolean, got {type(condition)}",
+                    f"Condition must be boolean, got {type(condition).__name__}",
                     self.filename,
                     self.source,
-                    node.condition.line if hasattr(node.condition, 'line') else 1,
-                    node.condition.column if hasattr(node.condition, 'column') else 1
+                    getattr(node.condition, 'line', 1),
+                    getattr(node.condition, 'column', 1)
                 ))
             if not condition:
                 break
@@ -413,11 +482,11 @@ class Interpreter:
             if not isinstance(condition, bool):
                 raise RuntimeError(format_error(
                     "RuntimeError",
-                    f"Condition must be boolean, got {type(condition)}",
+                    f"Condition must be boolean, got {type(condition).__name__}",
                     self.filename,
                     self.source,
-                    node.condition.line if hasattr(node.condition, 'line') else 1,
-                    node.condition.column if hasattr(node.condition, 'column') else 1
+                    getattr(node.condition, 'line', 1),
+                    getattr(node.condition, 'column', 1)
                 ))
             if not condition:
                 break
@@ -464,7 +533,7 @@ class Interpreter:
             for catch in node.catches:
                 self.push_scope()
                 try:
-                    self.variables[catch.exception_var.value.value] = str(e)
+                    self.variables[catch.exception_var.variable.value] = str(e)
                     return self.interpret(catch.body)
                 finally:
                     self.pop_scope()
@@ -481,26 +550,26 @@ class Interpreter:
             str(value),
             self.filename,
             self.source,
-            node.node.line if hasattr(node.node, 'line') else None,
-            node.node.column if hasattr(node.node, 'column') else None
+            getattr(node.node, 'line', 1),
+            getattr(node.node, 'column', 1)
         ))
 
     def interpret_function_def(self, node: FunctionDefNode) -> None:
         """Interprets a function definition."""
-        self.functions.append(node)
+        self.functions[node.name.value] = node
         return None
 
     def interpret_function_call(self, node: FunctionCallNode) -> Any:
         """Interprets a function call."""
-        func_name = node.func.value
+        func_name = node.func.variable.value
         if func_name not in self.functions:
             raise RuntimeError(format_error(
                 "RuntimeError",
                 f"Undefined function: {func_name}",
                 self.filename,
                 self.source,
-                node.func.line,
-                node.func.column
+                node.func.variable.line,
+                node.func.variable.column
             ))
         func = self.functions[func_name]
         args = [self.interpret(arg) for arg in node.args]
@@ -510,8 +579,8 @@ class Interpreter:
                 f"Expected {len(func.params)} arguments, got {len(args)}",
                 self.filename,
                 self.source,
-                node.func.line,
-                node.func.column
+                node.func.variable.line,
+                node.func.variable.column
             ))
         self.push_scope()
         try:
@@ -530,7 +599,19 @@ class Interpreter:
                 self.variables[param.name.value] = arg
             result = self.interpret(func.body)
             if isinstance(result, ReturnNode):
-                return self.interpret_return(result)
+                return_value = self.interpret_return(result)
+                if func.return_type:
+                    self.check_type(return_value, func.return_type)
+                return return_value
+            if func.return_type and func.return_type.value != 'void':
+                raise RuntimeError(format_error(
+                    "RuntimeError",
+                    f"Function {func_name} must return a value of type {func.return_type.value}",
+                    self.filename,
+                    self.source,
+                    node.func.variable.line,
+                    node.func.variable.column
+                ))
             return None
         finally:
             self.pop_scope()

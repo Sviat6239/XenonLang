@@ -609,7 +609,7 @@ class Parser:
                 'class', 'interface', 'enum', 'var', 'val', 'const', 'break', 'continue',
                 'try', 'catch', 'finally', 'throw', 'true', 'false', 'null', 'public',
                 'private', 'protected', 'internal', 'static', 'new', 'this', 'super',
-                'instanceof', 'lambda', 'import', 'from', 'as'
+                'instanceof', 'lambda', 'import', 'from', 'as', 'elvis'
             }
             if token.value.lower() in keyword_values:
                 raise SyntaxError(f"Unexpected keyword '{token.value}' used as variable at position {token.position}")

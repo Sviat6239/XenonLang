@@ -1,4 +1,5 @@
 import re
+from typing import List
 from .token import Token, TokenType, token_types_list
 
 class Lexer:
@@ -6,7 +7,9 @@ class Lexer:
     def __init__(self, code: str):
         self.code = code
         self.pos = 0
-        self.token_list: list[Token] = []
+        self.line = 1
+        self.column = 1
+        self.token_list: List[Token] = []
         # Token order prioritizes multi-char operators, keywords, then VARIABLE
         self.token_order = [
             # Multi-character operators (must come first)
@@ -31,7 +34,7 @@ class Lexer:
             # Brackets
             'LPAREN', 'RPAREN', 'LBRACE', 'RBRACE', 'LBRACKET', 'RBRACKET',
             # Whitespace and comments
-            'SPACE', 'COMMENT', 'MULTILINE_COMMENT',
+            'SPACE', 'COMMENT',
             # Identifiers (last to avoid matching keywords as variables)
             'VARIABLE'
         ]
@@ -42,14 +45,24 @@ class Lexer:
             if name in token_types_list  # Ensure token exists
         ]
 
-    def lex_analysis(self) -> list[Token]:
+    def update_position(self, value: str):
+        """Updates line and column numbers based on the token value."""
+        for char in value:
+            if char == '\n':
+                self.line += 1
+                self.column = 1
+            else:
+                self.column += 1
+        self.pos += len(value)
+
+    def lex_analysis(self) -> List[Token]:
         """Performs lexical analysis, returning a list of tokens excluding SPACE and COMMENT."""
         while self.next_token():
             pass
         # Filter out whitespace and comments
         self.token_list = [
             token for token in self.token_list
-            if token.type.name not in ('SPACE', 'COMMENT', 'MULTILINE_COMMENT')
+            if token.type.name not in ('SPACE', 'COMMENT')
         ]
         return self.token_list
 
@@ -63,11 +76,13 @@ class Lexer:
             match = pattern.match(substring)
             if match:
                 value = match.group(0)
-                token = Token(token_type, value, self.pos)
+                # Store line and column before updating position
+                token = Token(token_type, value, self.pos, self.line, self.column)
                 self.token_list.append(token)
-                self.pos += len(value)
+                # Update position, accounting for newlines in comments
+                self.update_position(value)
                 return True
 
         # Provide detailed error for invalid characters
         char = self.code[self.pos] if self.pos < len(self.code) else 'EOF'
-        raise SyntaxError(f"Unexpected character '{char}' at position {self.pos}")
+        raise SyntaxError(f"Unexpected character '{char}' at line {self.line}, column {self.column}")

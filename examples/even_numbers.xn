@@ -1,11 +1,11 @@
-// For Loop with Even Numbers
-// Prints even numbers from 0 to 10 using a for loop.
+# For Loop with Even Numbers
+# Prints even numbers from 0 to 10 using a for loop.
 
-// Initializes a for loop with:
-// - 'var i = 0': Starts at 0.
-// - 'i <= 10': Continues until 'i' is 10.
-// - 'i = i + 2': Increments by 2 to get even numbers.
+# Initializes a for loop with:
+# - 'var i = 0': Starts at 0.
+# - 'i <= 10': Continues until 'i' is 10.
+# - 'i = i + 2': Increments by 2 to get even numbers.
 for (var i = 0; i <= 10; i = i + 2) {
-    // Concatenates "Even: " with 'i' and prints the result.
+    # Concatenates "Even: " with 'i' and prints the result.
     print("Even: " + i);
 }

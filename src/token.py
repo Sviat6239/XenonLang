@@ -8,14 +8,15 @@ class TokenType:
 
 
 class Token:
-    def __init__(self, type: TokenType, value: str, position: int):
+    def __init__(self, type: TokenType, value: str, position: int, line: int = 1, column: int = 1):
         self.type = type
         self.value = value
         self.position = position
+        self.line = line
+        self.column = column
 
     def __repr__(self):
-        return f"Token(type={self.type.name}, value='{self.value}', pos={self.position})"
-
+        return f"Token(type={self.type.name}, value='{self.value}', pos={self.position}, line={self.line}, col={self.column})"
 
 token_types_list = {
     # Literals
@@ -125,6 +126,5 @@ token_types_list = {
 
     # Whitespace and Comments
     'SPACE': TokenType("SPACE", r'[ \n\t\r]+'),  # Whitespace
-    'COMMENT': TokenType("COMMENT", r'//[^\n]*'),  # Single-line comment
-    'MULTILINE_COMMENT': TokenType("MULTILINE_COMMENT", r'/\*[^*]*\*+(?:[^/*][^*]*\*+)*/'),  # Multi-line comment
+    'COMMENT': TokenType("COMMENT", r'#.*'),  # Python-style single-line comment
 }

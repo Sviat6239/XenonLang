@@ -165,22 +165,29 @@ class Interpreter:
         return value
 
     def check_type(self, value: Any, type_token: Token) -> None:
-        """Checks if a value matches the expected type (basic type checking)."""
-        type_name = type_token.type.name
-        if type_name == 'INT' and not isinstance(value, int):
-            raise RuntimeError(f"Expected int, got {type(value)}")
-        elif type_name == 'FLOAT' and not isinstance(value, float):
-            raise RuntimeError(f"Expected float, got {type(value)}")
-        elif type_name == 'DOUBLE' and not isinstance(value, float):
-            raise RuntimeError(f"Expected double, got {type(value)}")
-        elif type_name == 'BOOLEAN' and not isinstance(value, bool):
-            raise RuntimeError(f"Expected boolean, got {type(value)}")
-        elif type_name == 'STRING_TYPE' and not isinstance(value, str):
-            raise RuntimeError(f"Expected string, got {type(value)}")
-        elif type_name == 'ANY':
-            pass  # Any type allows all values
-        elif type_name == 'VARIABLE' and not isinstance(value, dict):  # Class instance check
-            raise RuntimeError(f"Expected instance of {type_token.value}, got {type(value)}")
+        """Checks if the value matches the expected type, allowing int-to-float conversion."""
+        expected_type = type_token.value
+        if value is None and expected_type != 'void':
+            raise RuntimeError(f"Expected {expected_type}, got None")
+        
+        if expected_type == 'float' or expected_type == 'double':
+            if isinstance(value, (int, float)):
+                return  # Allow int or float for float/double
+            raise RuntimeError(f"Expected {expected_type}, got {type(value).__name__}")
+        elif expected_type == 'int':
+            if isinstance(value, int):
+                return
+            raise RuntimeError(f"Expected int, got {type(value).__name__}")
+        elif expected_type == 'string':
+            if isinstance(value, str):
+                return
+            raise RuntimeError(f"Expected string, got {type(value).__name__}")
+        elif expected_type == 'boolean':
+            if isinstance(value, bool):
+                return
+            raise RuntimeError(f"Expected boolean, got {type(value).__name__}")
+        else:
+            raise RuntimeError(f"Unknown type: {expected_type}")
 
     def interpret_binary_op(self, node: BinaryOperationNode) -> Any:
         """Interprets a binary operation."""

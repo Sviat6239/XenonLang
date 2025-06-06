@@ -2,6 +2,7 @@ from abc import ABC
 from typing import List, Optional, Any, Dict
 from .token import Token, TokenType, token_types_list
 from .ast import *
+from .error import format_error
 
 class Interpreter:
     """Interprets an AST for a strongly-typed language with Python-like imports."""
@@ -165,29 +166,72 @@ class Interpreter:
         return value
 
     def check_type(self, value: Any, type_token: Token) -> None:
-        """Checks if the value matches the expected type, allowing int-to-float conversion."""
+        """Checks if the value matches the expected type, allowing int-to-float conversion and str alias."""
         expected_type = type_token.value
+        if expected_type == 'str':  # Map 'str' to 'string'
+            expected_type = 'string'
         if value is None and expected_type != 'void':
-            raise RuntimeError(f"Expected {expected_type}, got None")
-        
+            raise TypeError(format_error(
+                "TypeError",
+                f"Expected {expected_type}, got None",
+                self.filename,
+                self.source,
+                type_token.line,
+                type_token.column
+            ))
         if expected_type == 'float' or expected_type == 'double':
             if isinstance(value, (int, float)):
-                return  # Allow int or float for float/double
-            raise RuntimeError(f"Expected {expected_type}, got {type(value).__name__}")
+                return
+            raise TypeError(format_error(
+                "TypeError",
+                f"Expected {expected_type}, got {type(value).__name__}",
+                self.filename,
+                self.source,
+                type_token.line,
+                type_token.column
+            ))
         elif expected_type == 'int':
             if isinstance(value, int):
                 return
-            raise RuntimeError(f"Expected int, got {type(value).__name__}")
+            raise TypeError(format_error(
+                "TypeError",
+                f"Expected int, got {type(value).__name__}",
+                self.filename,
+                self.source,
+                type_token.line,
+                type_token.column
+            ))
         elif expected_type == 'string':
             if isinstance(value, str):
                 return
-            raise RuntimeError(f"Expected string, got {type(value).__name__}")
+            raise TypeError(format_error(
+                "TypeError",
+                f"Expected string, got {type(value).__name__}",
+                self.filename,
+                self.source,
+                type_token.line,
+                type_token.column
+            ))
         elif expected_type == 'boolean':
             if isinstance(value, bool):
                 return
-            raise RuntimeError(f"Expected boolean, got {type(value).__name__}")
+            raise TypeError(format_error(
+                "TypeError",
+                f"Expected boolean, got {type(value).__name__}",
+                self.filename,
+                self.source,
+                type_token.line,
+                type_token.column
+            ))
         else:
-            raise RuntimeError(f"Unknown type: {expected_type}")
+            raise RuntimeError(format_error(
+                "RuntimeError",
+                f"Unknown type: {expected_type}",
+                self.filename,
+                self.source,
+                type_token.line,
+                type_token.column
+            ))
 
     def interpret_binary_op(self, node: BinaryOperationNode) -> Any:
         """Interprets a binary operation."""

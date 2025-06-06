@@ -13,7 +13,7 @@ for (var i = 0; i < size; i++) {
 # Classifies numbers from 1 to 10 as small, medium, or large.
 
 # Loops from 1 to 10.
-for (var i = 1; i <= 10; i = i + 1) {
+for (var i = 1; i <= 10; i = i++) {
     # Checks if 'i' is <= 3.
     if (i <= 3) {
         # Prints if small.

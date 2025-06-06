@@ -2,11 +2,14 @@ from abc import ABC
 from typing import List, Optional, Any, Dict
 from .token import Token, TokenType, token_types_list
 from .ast import *
+from .error import format_error
 
 class Parser:
     """Parses a list of tokens into an AST for a strongly-typed language with Python-like imports."""
-    def __init__(self, tokens: List[Token]):
+    def __init__(self, tokens: List[Token], source: str, filename: str):
         self.tokens = tokens
+        self.source = source
+        self.filename = filename
         self.pos = 0
         self.current_token: Optional[Token] = tokens[0] if tokens else None
 
@@ -21,7 +24,29 @@ class Parser:
             token = self.current_token
             self.advance()
             return token
-        raise SyntaxError(f"Expected {token_type_name}, got {self.current_token.type.name if self.current_token else 'EOF'} at position {self.current_token.position if self.current_token else 'EOF'}")
+        raise SyntaxError(format_error(
+            "SyntaxError",
+            f"Expected {token_type_name}, got {self.current_token.type.name if self.current_token else 'EOF'}",
+            self.filename,
+            self.source,
+            self.current_token.line if self.current_token else 1,
+            self.current_token.column if self.current_token else 1
+        ))
+
+    def expect_one_of(self, token_type_names: tuple) -> Token:
+        """Expects one of the specified token types."""
+        if self.current_token and self.current_token.type.name in token_type_names:
+            token = self.current_token
+            self.advance()
+            return token
+        raise SyntaxError(format_error(
+            "SyntaxError",
+            f"Expected one of {token_type_names}, got {self.current_token.type.name if self.current_token else 'EOF'}",
+            self.filename,
+            self.source,
+            self.current_token.line if self.current_token else 1,
+            self.current_token.column if self.current_token else 1
+        ))
 
     def parse(self) -> ProgramNode:
         """Parses the entire program into a ProgramNode with imports and statements."""
@@ -37,7 +62,7 @@ class Parser:
         """
         imports = []
         statements = []
-        while self.current_token:
+        while self.current_token and self.current_token.type.name != 'EOF':
             if self.current_token.type.name == 'IMPORT':
                 imports.append(self.parse_import())
             else:
@@ -76,7 +101,13 @@ class Parser:
     def parse_statement(self) -> ExpressionNode:
         """Parses a single statement (e.g., declaration, control flow, expression)."""
         if not self.current_token:
-            raise SyntaxError("Unexpected end of input")
+            raise SyntaxError(format_error(
+                "SyntaxError",
+                "Unexpected end of input",
+                self.filename,
+                self.source,
+                1, 1
+            ))
         
         if self.current_token.type.name in ('VAR', 'VAL', 'CONST'):
             return self.parse_declaration()
@@ -135,32 +166,52 @@ class Parser:
         type_token = None
         if self.current_token and self.current_token.type.name == 'COLON':
             self.advance()
-            type_token = self.expect_one_of(('INT', 'FLOAT', 'DOUBLE', 'BOOLEAN', 'STRING_TYPE', 'VOID', 'ANY', 'VARIABLE'))
+            type_token = self.current_token
+            if type_token.type.name in ('INT', 'FLOAT', 'DOUBLE', 'BOOLEAN', 'STRING_TYPE', 'VOID', 'ANY'):
+                self.advance()
+            elif type_token.type.name == 'VARIABLE' and type_token.value == 'str':
+                type_token = Token(TokenType('STRING_TYPE', r'\bstring\b'), 'string', type_token.position, type_token.line, type_token.column)
+                self.advance()
+            else:
+                raise SyntaxError(format_error(
+                    "SyntaxError",
+                    f"Expected type, got {type_token.type.name}",
+                    self.filename,
+                    self.source,
+                    type_token.line,
+                    type_token.column
+                ))
             if self.current_token and self.current_token.type.name == 'NULLABLE':
                 self.advance()  # Consume '?' for nullable types
         expr = None
-        if self.current_token.type.name == 'ASSIGN':
+        if self.current_token and self.current_token.type.name == 'ASSIGN':
             self.advance()
             expr = self.parse_expression()
         self.expect('SEMICOLON')
         if decl_type == 'VAR':
-            return VarDeclarationNode(decl_token, variable, type_token, expr)
+            return VarDeclarationNode(expr)
         elif decl_type == 'VAL':
             if not expr:
-                raise SyntaxError("Val declaration requires an initializer")
-            return ValDeclarationNode(decl_token, variable, type_token, expr)
+                raise SyntaxError(format_error(
+                    "SyntaxError",
+                    "Val declaration requires an initializer",
+                    self.filename,
+                    self.source,
+                    decl_token.line,
+                    decl_token.column
+                ))
+            return ValDeclarationNode(decl_token)
         else:  # CONST
             if not expr:
-                raise SyntaxError("Const declaration requires an initializer")
-            return ConstDeclarationNode(decl_token, variable, type_token, expr)
-
-    def expect_one_of(self, token_type_names: tuple) -> Token:
-        """Expects one of the specified token types."""
-        if self.current_token and self.current_token.type.name in token_type_names:
-            token = self.current_token
-            self.advance()
-            return token
-        raise SyntaxError(f"Expected one of {token_type_names}, got {self.current_token.type.name if self.current_token else 'EOF'}")
+                raise SyntaxError(format_error(
+                    "SyntaxError",
+                    "Const declaration requires an initializer",
+                    self.filename,
+                    self.source,
+                    decl_token.line,
+                    decl_token.column
+                ))
+            return ConstDeclarationNode(expr.value)
 
     def parse_if_statement(self) -> IfNode:
         """Parses an if statement with optional else branch.
@@ -268,7 +319,21 @@ class Parser:
             type_token = None
             if self.current_token and self.current_token.type.name == 'COLON':
                 self.advance()
-                type_token = self.expect_one_of(('INT', 'FLOAT', 'DOUBLE', 'BOOLEAN', 'STRING_TYPE', 'ANY', 'VARIABLE'))
+                type_token = self.current_token
+                if type_token.type.name in ('INT', 'FLOAT', 'DOUBLE', 'BOOLEAN', 'STRING_TYPE', 'ANY'):
+                    self.advance()
+                elif type_token.type.name == 'VARIABLE' and type_token.value == 'str':
+                    type_token = Token(TokenType('STRING_TYPE', r'\bstring\b'), 'string', type_token.position, type_token.line, type_token.column)
+                    self.advance()
+                else:
+                    raise SyntaxError(format_error(
+                        "SyntaxError",
+                        f"Expected type, got {type_token.type.name}",
+                        self.filename,
+                        self.source,
+                        type_token.line,
+                        type_token.column
+                    ))
             self.expect('RPAREN')
             body = self.parse_block()
             catches.append(CatchNode(exception_var, type_token, body))
@@ -312,7 +377,21 @@ class Parser:
         return_type = None
         if self.current_token and self.current_token.type.name == 'COLON':
             self.advance()
-            return_type = self.expect_one_of(('INT', 'FLOAT', 'DOUBLE', 'BOOLEAN', 'STRING_TYPE', 'VOID', 'ANY', 'VARIABLE'))
+            return_type = self.current_token
+            if return_type.type.name in ('INT', 'FLOAT', 'DOUBLE', 'BOOLEAN', 'STRING_TYPE', 'VOID', 'ANY'):
+                self.advance()
+            elif return_type.type.name == 'VARIABLE' and return_type.value == 'str':
+                return_type = Token(TokenType('STRING_TYPE', r'\bstring\b'), 'string', return_type.position, return_type.line, return_type.column)
+                self.advance()
+            else:
+                raise SyntaxError(format_error(
+                    "SyntaxError",
+                    f"Expected type, got {return_type.type.name}",
+                    self.filename,
+                    self.source,
+                    return_type.line,
+                    return_type.column
+                ))
             if self.current_token and self.current_token.type.name == 'NULLABLE':
                 self.advance()
         body = self.parse_block()
@@ -329,7 +408,21 @@ class Parser:
         is_nullable = False
         if self.current_token and self.current_token.type.name == 'COLON':
             self.advance()
-            type_token = self.expect_one_of(('INT', 'FLOAT', 'DOUBLE', 'BOOLEAN', 'STRING_TYPE', 'ANY', 'VARIABLE'))
+            type_token = self.current_token
+            if type_token.type.name in ('INT', 'FLOAT', 'DOUBLE', 'BOOLEAN', 'STRING_TYPE', 'ANY'):
+                self.advance()
+            elif type_token.type.name == 'VARIABLE' and type_token.value == 'str':
+                type_token = Token(TokenType('STRING_TYPE', r'\bstring\b'), 'string', type_token.position, type_token.line, type_token.column)
+                self.advance()
+            else:
+                raise SyntaxError(format_error(
+                    "SyntaxError",
+                    f"Expected type, got {type_token.type.name}",
+                    self.filename,
+                    self.source,
+                    type_token.line,
+                    type_token.column
+                ))
             if self.current_token and self.current_token.type.name == 'NULLABLE':
                 self.advance()
                 is_nullable = True
@@ -452,6 +545,7 @@ class Parser:
         """
         expr = self.parse_elvis()
         while self.current_token and self.current_token.type.name == 'NULL_COALESCE':
+            token = self.current_token
             self.advance()
             right = self.parse_elvis()
             expr = NullCoalesceNode(expr, right)
@@ -465,6 +559,7 @@ class Parser:
         """
         expr = self.parse_assignment()
         while self.current_token and self.current_token.type.name == 'ELVIS':
+            token = self.current_token
             self.advance()
             right = self.parse_assignment()
             expr = ElvisNode(expr, right)
@@ -477,7 +572,14 @@ class Parser:
             token = self.current_token
             self.advance()
             if not isinstance(expr, VariableNode):
-                raise SyntaxError(f"Invalid assignment target at position {token.position}")
+                raise SyntaxError(format_error(
+                    "SyntaxError",
+                    "Invalid assignment target",
+                    self.filename,
+                    self.source,
+                    token.line,
+                    token.column
+                ))
             value = self.parse_expression()
             return AssignNode(token, expr, value)
         return expr
@@ -588,7 +690,13 @@ class Parser:
     def parse_primary(self) -> ExpressionNode:
         """Parses primary expressions (literals, variables, function calls, parenthesized expressions)."""
         if not self.current_token:
-            raise SyntaxError("Expected expression, got EOF")
+            raise SyntaxError(format_error(
+                "SyntaxError",
+                "Expected expression, got EOF",
+                self.filename,
+                self.source,
+                1, 1
+            ))
         
         token = self.current_token
         self.advance()
@@ -612,7 +720,14 @@ class Parser:
                 'instanceof', 'lambda', 'import', 'from', 'as', 'elvis'
             }
             if token.value.lower() in keyword_values:
-                raise SyntaxError(f"Unexpected keyword '{token.value}' used as variable at position {token.position}")
+                raise SyntaxError(format_error(
+                    "SyntaxError",
+                    f"Unexpected keyword '{token.value}' used as variable",
+                    self.filename,
+                    self.source,
+                    token.line,
+                    token.column
+                ))
             if self.current_token and self.current_token.type.name == 'LPAREN':
                 return self.parse_function_call(token)
             return VariableNode(token)
@@ -620,7 +735,14 @@ class Parser:
             expr = self.parse_expression()
             self.expect('RPAREN')
             return expr
-        raise SyntaxError(f"Unexpected token {token.type.name} at position {token.position}")
+        raise SyntaxError(format_error(
+            "SyntaxError",
+            f"Unexpected token {token.type.name}",
+            self.filename,
+            self.source,
+            token.line,
+            token.column
+        ))
 
     def parse_function_call(self, func_token: Token) -> FunctionCallNode:
         """Parses a function call.

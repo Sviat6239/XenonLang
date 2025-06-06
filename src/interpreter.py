@@ -498,7 +498,7 @@ class Interpreter:
             self.interpret(node.init)
         self.push_scope()
         try:
-            while node.condition is None or self.interpret(node.condition):
+            while node.cond is None or self.interpret(node.cond):
                 result = self.interpret(node.body)
                 if isinstance(result, BreakNode):
                     break

@@ -18,12 +18,14 @@ class Token:
     def __repr__(self):
         return f"Token(type={self.type.name}, value='{self.value}', pos={self.position}, line={self.line}, col={self.column})"
 
+
+# Token types definition
 token_types_list = {
     # Literals
     'NUMBER': TokenType("NUMBER", r'-?\d+(\.\d+)?([eE][+-]?\d+)?'),  # Integers, decimals, scientific notation
     'STRING': TokenType("STRING", r'\"[^\"\n]*\"|\'[^\'\n]*\''),  # Double or single-quoted strings
     'CHAR': TokenType("CHAR", r'\'[^\']?\''),  # Single character literals
-    'VARIABLE': TokenType("VARIABLE", r'\b[a-zA-Z_][a-zA-Z0-9_]*\b'),  # Identifiers
+    'VARIABLE': TokenType("VARIABLE", r'\b[a-zA-Z_][a-zA-Z0-9_]*\b(?!\s*(?:class|fun|var|val|const|if|else|while|do|for|switch|case|default|try|catch|finally|throw|return|break|continue|print|new|true|false|null|import|from|as|interface|enum|instanceof|public|private|protected|internal|int|float|double|boolean|string|void|any|static|this|super|lambda))'),  # Identifiers (excludes keywords)
     'TRUE': TokenType("TRUE", r'\btrue\b'),  # Boolean true
     'FALSE': TokenType("FALSE", r'\bfalse\b'),  # Boolean false
     'NULL': TokenType("NULL", r'\bnull\b'),  # Null literal
@@ -57,7 +59,7 @@ token_types_list = {
 
     # Delimiters
     'SEMICOLON': TokenType("SEMICOLON", r';'),  # Statement terminator
-    'COLON': TokenType("COLON", r':'),  # Type annotations
+    'COLON': TokenType("COLON", r':'),  # Type annotations or inheritance
     'COMMA': TokenType("COMMA", r','),  # Separator
     'DOT': TokenType("DOT", r'\.'),  # Member access
     'ARROW': TokenType("ARROW", r'->'),  # Lambda or function types
@@ -128,3 +130,6 @@ token_types_list = {
     'SPACE': TokenType("SPACE", r'[ \n\t\r]+'),  # Whitespace
     'COMMENT': TokenType("COMMENT", r'#.*'),  # Python-style single-line comment
 }
+
+# Create a lookup dictionary for quick access
+token_types = {name: token_type for name, token_type in token_types_list.items()}
